@@ -71,7 +71,8 @@ WHERE
 	julianday(orders.shippedDate) > julianday(orders.requiredDate);
 
 -- Sub question 3: Which Office is the most efficient?
-SELECT ofc.city,
+SELECT 
+	ofc.city,
 	ROUND(AVG(julianday(ord.shippedDate) - julianday(ord.orderDate)), 1) AS avg_shipping_time
 FROM orders as ord 
 JOIN customers as cust 
@@ -80,4 +81,120 @@ JOIN employees as emp
 	on emp.employeeNumber = cust.salesRepEmployeeNumber
 JOIN offices as ofc 
 	on ofc.officeCode = emp.officeCode
-GROUP BY ofc.city;
+GROUP BY 
+	ofc.city;
+
+/* BUSINESS QUESTION 3:  Who are our "VIP" customers, 
+and which sales reps are the most effective at managing them?
+Created by: Ossian Villbrand
+*/
+
+-- Sub question 1: What is the *Customer Lifetime Value (LTV)*?
+WITH CustomerPerformance AS (
+    SELECT 
+        c.customerNumber,
+        c.customerName,
+        SUM(od.quantityOrdered * od.priceEach) AS totalRevenue,
+        COUNT(DISTINCT o.orderNumber) AS totalOrders,
+        MIN(o.orderDate) AS firstPurchase,
+        MAX(o.orderDate) AS latestPurchase
+    FROM customers AS c
+    JOIN orders AS o 
+		ON c.customerNumber = o.customerNumber
+    JOIN orderdetails AS od 
+		ON o.orderNumber = od.orderNumber
+    GROUP BY 
+		c.customerNumber
+)
+SELECT 
+    customerName,
+    totalRevenue,
+    totalOrders,
+    -- Calculating Customer Lifespan in days
+    ROUND(julianday(latestPurchase) - julianday(firstPurchase), 0) AS lifespanDays,
+    -- Calculating Average Order Value (AOV)
+    ROUND(totalRevenue / totalOrders, 2) AS avgOrderValue,
+    -- Labeling customers based on value to company 
+    CASE 
+        WHEN totalRevenue > 100000 THEN 'Tier 1'
+        WHEN totalRevenue > 50000 THEN 'Tier 2'
+        ELSE 'Tier 3'
+    END AS CustomerValue
+FROM CustomerPerformance
+ORDER BY 
+	totalRevenue DESC;
+
+-- Sub question 2: Who are our *At-Risk Customers*?	
+WITH customerRetention AS (
+    SELECT 
+        c.customerNumber,
+        c.customerName,
+        -- Linking the Sales Rep name here
+        e.firstName || ' ' || e.lastName AS salesRep,
+        MAX(julianday(o.orderDate)) AS lastOrderDate,
+        SUM(od.quantityOrdered * od.priceEach) AS totalRevenue 
+    FROM customers AS c
+    JOIN orders AS o 
+		ON o.customerNumber = c.customerNumber
+    JOIN orderdetails AS od 
+		ON o.orderNumber = od.orderNumber
+    -- Joining employees to see who owns the account
+    JOIN employees AS e 
+		ON c.salesRepEmployeeNumber = e.employeeNumber
+    GROUP BY 
+		c.customerNumber
+)
+SELECT 
+    customerName,
+    salesRep,
+	--Using a hard date instead of 'now' given the age of the data set to prove code efficacy 
+    ROUND(julianday('2005-06-01') - lastOrderDate, 0) AS daysSinceLastOrder,
+    totalRevenue
+FROM customerRetention
+WHERE 
+	daysSinceLastOrder > 90 
+ORDER BY 
+	totalRevenue DESC;	
+	
+-- Sub question 3: What is the *Sales Rep ROI*?
+ WITH RepPerformance AS (
+    SELECT 
+        e.firstName || ' ' || e.lastName AS salesRep,
+        COUNT(DISTINCT c.customerNumber) AS totalAccounts,
+        COUNT(DISTINCT o.orderNumber) AS totalOrders,
+        SUM(od.quantityOrdered * od.priceEach) AS totalRevenue
+    FROM employees e
+    JOIN customers c 
+	 	ON e.employeeNumber = c.salesRepEmployeeNumber
+    JOIN orders o 
+	 	ON c.customerNumber = o.customerNumber
+    JOIN orderdetails od 
+	 	ON o.orderNumber = od.orderNumber
+    GROUP BY 
+		e.employeeNumber
+)
+SELECT 
+    salesRep,
+    totalAccounts,
+    totalRevenue,
+    -- Efficiency Metric: Revenue per Account
+    ROUND(totalRevenue / totalAccounts, 2) AS revenuePerAccount,
+    -- Efficiency Metric: Average Order Value
+    ROUND(totalRevenue / totalOrders, 2) AS avgOrderValue
+FROM RepPerformance
+ORDER BY 
+	 totalRevenue DESC;
+
+SELECT 
+    cust.country, 
+    SUM(julianday(ord.shippedDate) - julianday(ord.requiredDate)) AS totalDelayDays,
+    COUNT(ord.orderNumber) AS lateOrdersCount
+FROM orders AS ord 
+JOIN customers AS cust 
+    ON ord.customerNumber = cust.customerNumber
+WHERE 
+	ord.shippedDate > ord.requiredDate
+GROUP BY 
+	cust.country
+ORDER BY 
+	totalDelayDays DESC;
