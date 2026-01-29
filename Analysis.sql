@@ -6,25 +6,23 @@ Date: 2025-01-15
 
 -- Sub question 1: What is the Profit Margin per product?
 SELECT
-    products.productName,
-    (products.MSRP - products.buyPrice) AS profitMargin,
-    ((products.MSRP - products.buyPrice) / products.MSRP * 100) AS marginPercentage
-FROM products;
+    p.productName,
+    (p.MSRP - p.buyPrice) AS profitMargin,
+    ((p.MSRP - p.buyPrice) / p.MSRP * 100) AS marginPercentage
+FROM products AS p;
 
 --Sub question 2: Which products have a Low Stock-to-Sales Ratio?
 SELECT
     p.productName,
     p.quantityInStock,
     SUM(od.quantityOrdered) AS totalSold,
-    -- Calculating the ratio: Stock divided by Sales
-    (p.quantityInStock * 1.0 / SUM(od.quantityOrdered)) AS stockToSalesRatio
-FROM products as p
-JOIN orderdetails as od 
-	ON p.productCode = od.productCode
+    (p.quantityInStock * 1.0 / NULLIF(SUM(od.quantityOrdered), 0)) AS stockToSalesRatio
+FROM products AS p
+JOIN orderdetails AS od 
+    ON p.productCode = od.productCode
 GROUP BY p.productCode, p.productName, p.quantityInStock
 HAVING
-    -- Defines "Low" as stock is less than 20% of total sales
-    (p.quantityInStock / SUM(od.quantityOrdered)) < 0.2
+    (p.quantityInStock * 1.0 / NULLIF(SUM(od.quantityOrdered), 0)) < 0.2
 ORDER BY
     stockToSalesRatio ASC;
 	
@@ -45,44 +43,46 @@ Created by: Ossian Villbrand
 */
 
 -- Sub question 1: What is the average Fulfillment Delay? (Since we don't have delivery dates we have to restrict ourselves to processing time for orders)
-SELECT julianday(orders.shippedDate) - julianday(orders.orderDate) as daysOfProcessing 
-FROM orders 
+SELECT julianday(o.shippedDate) - julianday(o.orderDate) as daysOfProcessing 
+FROM orders AS o;
 
 -- Sub question 2: Which countries have the highest rate of Late Shipments?
 SELECT 
-    cust.country, 
-    SUM(julianday(ord.shippedDate) - julianday(ord.requiredDate)) AS total_delay_days,
-    COUNT(ord.orderNumber) AS number_of_late_orders
-FROM orders AS ord 
-JOIN customers AS cust 
-    ON ord.customerNumber = cust.customerNumber
+    c.country, 
+    SUM(julianday(o.shippedDate) - julianday(o.requiredDate)) AS total_delay_days,
+    COUNT(o.orderNumber) AS number_of_late_orders
+FROM orders AS o
+JOIN customers AS c 
+    ON o.customerNumber = c.customerNumber
 WHERE 
-	ord.shippedDate > ord.requiredDate
-GROUP BY cust.country
+	o.shippedDate > o.requiredDate
+GROUP BY c.country
 ORDER BY 
 	total_delay_days DESC;
 
 -- After the initial search only found one delayed shipment I wanted to verify 
 SELECT COUNT(*)
-FROM orders 
-JOIN customers 
-	ON orders.customerNumber = customers.customerNumber
+FROM orders AS o
+JOIN customers AS c
+	ON o.customerNumber = c.customerNumber
 WHERE 
-	julianday(orders.shippedDate) > julianday(orders.requiredDate);
+	julianday(o.shippedDate) > julianday(o.requiredDate);
 
 -- Sub question 3: Which Office is the most efficient?
 SELECT 
-	ofc.city,
-	ROUND(AVG(julianday(ord.shippedDate) - julianday(ord.orderDate)), 1) AS avg_shipping_time
-FROM orders as ord 
-JOIN customers as cust 
-	on ord.customerNumber = cust.customerNumber
-JOIN employees as emp 
-	on emp.employeeNumber = cust.salesRepEmployeeNumber
-JOIN offices as ofc 
-	on ofc.officeCode = emp.officeCode
+    ofc.city,
+    ROUND(AVG(julianday(o.shippedDate) - julianday(o.orderDate)), 1) AS avg_shipping_time
+FROM orders AS o 
+JOIN customers AS c 
+    ON o.customerNumber = c.customerNumber
+JOIN employees AS e 
+    ON e.employeeNumber = c.salesRepEmployeeNumber
+JOIN offices AS ofc 
+    ON ofc.officeCode = e.officeCode
 GROUP BY 
-	ofc.city;
+    ofc.city
+ORDER BY 
+    avg_shipping_time ASC;
 
 /* BUSINESS QUESTION 3:  Who are our "VIP" customers, 
 and which sales reps are the most effective at managing them?
@@ -184,17 +184,3 @@ SELECT
 FROM RepPerformance
 ORDER BY 
 	 totalRevenue DESC;
-
-SELECT 
-    cust.country, 
-    SUM(julianday(ord.shippedDate) - julianday(ord.requiredDate)) AS totalDelayDays,
-    COUNT(ord.orderNumber) AS lateOrdersCount
-FROM orders AS ord 
-JOIN customers AS cust 
-    ON ord.customerNumber = cust.customerNumber
-WHERE 
-	ord.shippedDate > ord.requiredDate
-GROUP BY 
-	cust.country
-ORDER BY 
-	totalDelayDays DESC;
