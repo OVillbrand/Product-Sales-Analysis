@@ -43,7 +43,8 @@ Created by: Ossian Villbrand
 */
 
 -- Sub question 1: What is the average Fulfillment Delay? (Since we don't have delivery dates we have to restrict ourselves to processing time for orders)
-SELECT julianday(o.shippedDate) - julianday(o.orderDate) as daysOfProcessing 
+SELECT 
+	AVG(julianday(o.shippedDate) - julianday(o.orderDate)) as avgDaysOfProcessing 
 FROM orders AS o;
 
 -- Sub question 2: Which countries have the highest rate of Late Shipments?
@@ -184,3 +185,4 @@ SELECT
 FROM RepPerformance
 ORDER BY 
 	 totalRevenue DESC;
+
